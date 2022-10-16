@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Hiper Libertad",
+    "url": "https://www.hiperlibertad.com.ar/busca?ft=yerba%20playadito",
+    "productsView": {
+      "listItem": "[class*=\"styles__ProductItem\"]",
+      "title": "[class*=\"styles__Title-\"]",
+      "price": "[class*=\"styles__BestPrice\"]"
+    }
+  },
+  {
+    "name": "Super mami",
+    "url": "https://www.dinoonline.com.ar/super/categoria?Ntt=yerba+playadito",
+    "productsView": {
+      "listItem": ".item",
+      "title": ".description",
+      "price": ".precio-unidad span"
+    }
+  },
+  {
+    "name": "Disco",
+    "url": "https://www.disco.com.ar/yerba%20playadito?_q=yerba%20playadito&map=ft",
+    "productsView": {
+      "listItem": "#gallery-layout-container > div > section > a > article",
+      "title": "#gallery-layout-container > div > section > a > article > .vtex-product-summary-2-x-nameContainer > h2 > span",
+      "price": "#gallery-layout-container > div > section > a > article > .vtex-flex-layout-0-x-flexRow--mainRow-price-box > div > div > div > div > div > div > div > div > span"
+    }
+  },
+  {
+    "name": "Chango mas",
+    "url": "https://www.masonline.com.ar/yerba%20playadito?_q=yerba%20playadito&map=ft",
+    "productsView": {
+      "listItem": ".vtex-search-result-3-x-gallery > div > section",
+      "title": ".vtex-product-summary-2-x-nameContainer > h3 > span",
+      "price": ".vtex-store-components-3-x-priceContainer > div > span > span"
+    }
+  }
+]
