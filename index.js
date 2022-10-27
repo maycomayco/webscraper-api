@@ -1,24 +1,25 @@
-const { chromium } = require("playwright");
-// const websites = require("./websites.json");
+const axios = require("axios");
+const cheerio = require("cheerio");
 
-const options = { timeout: 5000 };
-const PAGE_URL = "https://www.newbalance.com.ar/";
+const axiosClient = axios.create({
+  timeout: 5000,
+});
 
-(async () => {
-  const browser = await chromium.launch({ headless: false });
-  const page = await browser.newPage();
-  await page.goto(PAGE_URL);
-
-  await page
-    .locator(".sns-serachbox-pro", { timeout: 5000 })
-    .hover({ timeout: 5000 });
-  await page
-    .locator('[placeholder="Buscar en la tienda"]', { timeout: 5000 })
-    .fill("hierro");
-  await page.locator('[title="Búsqueda"]').click();
-
-  // await page.close();
-
-  // end of execution
-  // await browser.close();
-})();
+// get html
+axiosClient(
+  "https://www.newbalance.com.ar/hombre/zapatillas/running/trail-running"
+)
+  .then((resp) => resp.data)
+  .then((data) => {
+    const $ = cheerio.load(data);
+    const products = [];
+    $(".info-inner").each((i, el) => {
+      const product = {
+        name: $(el).find(".item-title > a").text().trim(),
+        link: $(el).find(".item-title > a").attr("href"),
+        price: $(el).find(".item-price .price").text(),
+      };
+      products.push(product);
+    });
+    console.log(products);
+  });
