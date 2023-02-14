@@ -1,4 +1,4 @@
-# Web Scraper
+# Web Scraper API
 
 A powerful web scraper that collects useful information from multiple websites. Developed with Node.js and Express, this app uses the Cheerio library for scraping. Currently deployed on Render.com.
 
