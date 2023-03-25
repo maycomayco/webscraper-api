@@ -44,14 +44,3 @@ export const getTrailRunningShoes = async (req, res) => {
     res.status(500).send({ status: "FAILED", error: error?.message || error });
   }
 };
-
-// const start = performance.now();
-
-// const response = await getNewBalance();
-// const message = parseMessage(response);
-
-// await sendMessage(message);
-
-// const end = performance.now();
-// const time = (end - start) / 1000;
-// console.log(`Tiempo de ejecución: ${time} segundos`);
