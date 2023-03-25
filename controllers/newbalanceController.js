@@ -1,4 +1,4 @@
-import { scrape } from "./utils.js";
+import { scrape } from "../services/scraperService.js";
 
 const URL = {
   TRAIL_RUNNING:
