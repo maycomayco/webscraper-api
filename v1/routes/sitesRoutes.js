@@ -1,8 +1,8 @@
 import express from "express";
-import { getTrailRunningShoes } from "../../controllers/newbalanceController.js";
+import { getHierroShoes } from "../../controllers/newbalanceController.js";
 
 const router = express.Router();
 
-router.get("/newbalance", getTrailRunningShoes);
+router.get("/newbalance", getHierroShoes);
 
 export default router;

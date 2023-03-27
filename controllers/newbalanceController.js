@@ -1,9 +1,9 @@
 import { scrape } from "../services/scraperService.js";
 
 const URL = {
-  TRAIL_RUNNING:
+  ALL_TRAIL_RUNNING_SHOES:
     "https://www.newbalance.com.ar/hombre/zapatillas/running/trail-running",
-  HIERRO:
+  HIERRO_SHOES:
     "https://www.newbalance.com.ar/catalogsearch/result/?cat=&q=%22hierro%22",
 };
 
@@ -20,9 +20,9 @@ const CONSTANTS = {
   TITLE: "title",
 };
 
-export const getTrailRunningShoes = async (req, res) => {
+export const getHierroShoes = async (req, res) => {
   try {
-    const $ = await scrape(URL.TRAIL_RUNNING);
+    const $ = await scrape(URL.HIERRO_SHOES);
     const shoes = [];
 
     $(SELECTORS.PRODUCTS).each((idx, el) => {
