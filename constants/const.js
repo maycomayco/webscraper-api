@@ -1,1 +1,1 @@
-export const FETCH_TIMEOUT_MS = 10_000;
+export const FETCH_TIMEOUT_MS = 10000;
