@@ -5,41 +5,61 @@ const URL = {
 };
 
 const SELECTORS = {
-    PRODUCTS: ".prd",
-    NAME: ".item-title > a",
-    URL: ".item-title > a",
-    PRICE: ".item-price .price",
-    VARIANT: ".item-img > a",
+    PRODUCTS: "div.product[data-pid]",
+    NAME: ".pdp-link > a.link",
+    URL: ".pdp-link > a.link",
+    PRICE: ".price .sales .value",
+    COLOR_SWATCHES: ".color-swatches",
+    SWATCH_LINK: "a.swatch-link",
 };
 
 const CONSTANTS = {
     HREF: "href",
-    TITLE: "title",
+    PID: "data-pid",
+};
+
+// data-value format is "{productId}-{colorName}" — strip the id prefix to get the readable color name.
+// If there's no dash (unexpected format), return the raw value rather than an empty string.
+const getVariants = ($, el) => {
+    if ($(el).find(SELECTORS.COLOR_SWATCHES).length === 0) return null;
+    return $(el).find(SELECTORS.SWATCH_LINK).map((_, a) => {
+        const value = $(a).attr("data-value") ?? "";
+        const dashIdx = value.indexOf("-");
+        return dashIdx === -1 ? value : value.slice(dashIdx + 1);
+    }).get(); // .get() converts the Cheerio collection to a plain JS array
 };
 
 /**
- * Retrieves Hierro shoes from a specified URL and sends the scraped data as a response.
- * @param {Object} req - The request object.
- * @param {Object} res - The response object.
- * @returns {Promise<void>} - A promise that resolves when the data is sent as a response.
+ * Scrapes New Balance trail running shoes (size 8.5) and sends the result as JSON.
+ * @param {Object} req - Express request object.
+ * @param {Object} res - Express response object.
+ * @returns {Promise<void>}
  */
-export const getHierroShoes = async (req, res) => {
+export const getNewBalanceShoes = async (req, res) => {
     try {
         const $ = await scrape(URL.TRAIL_RUNNING_SHOES_8_5_SIZE);
         const shoes = [];
 
-        $(SELECTORS.PRODUCTS).each((idx, el) => {
+        $(SELECTORS.PRODUCTS).each((_, el) => {
             const product = {
-                id: idx,
+                id: $(el).attr(CONSTANTS.PID),
                 name: $(el).find(SELECTORS.NAME).text().trim(),
                 url: $(el).find(SELECTORS.URL).attr(CONSTANTS.HREF),
-                price: $(el).find(SELECTORS.PRICE).text(),
-                variant: $(el).find(SELECTORS.VARIANT).attr(CONSTANTS.TITLE)?.toLocaleLowerCase() ?? null,
+                // .first() is required because the price container holds two .value spans
+                // (regular price + sale price); we always want the first one.
+                price: $(el).find(SELECTORS.PRICE).first().text().trim(),
+                variants: getVariants($, el),
             };
             shoes.push(product);
         });
 
-        // the 200 status is not needed because the response is already sent with the data
+        // Empty result means the upstream returned 200 but the page content changed
+        // (bot-detection wall, HTML restructure, etc.) — treat it as a gateway failure.
+        if (shoes.length === 0) {
+            console.warn("[getNewBalanceShoes] No products found — selector may be stale or page content changed");
+            return res.status(502).send({ error: "No products parsed from upstream page" });
+        }
+
         res.send({ data: shoes });
     } catch (error) {
         if (error.name === "TimeoutError") {
