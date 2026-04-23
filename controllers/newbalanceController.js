@@ -1,6 +1,7 @@
 import { scrape } from "../services/scraperService.js";
 
 const URL = {
+    BASE: "https://www.newbalance.com.ar",
     TRAIL_RUNNING_SHOES_8_5_SIZE: "https://www.newbalance.com.ar/running/zapatillas/trail/?cgid=running-zapatillas-trail&prefn1=Gender&prefv1=Mens&prefn2=size&prefv2=8.5&srule=price-high-to-low&start=0&sz=9"
 };
 
@@ -44,7 +45,7 @@ export const getNewBalanceShoes = async (req, res) => {
             const product = {
                 id: $(el).attr(CONSTANTS.PID),
                 name: $(el).find(SELECTORS.NAME).text().trim(),
-                url: $(el).find(SELECTORS.URL).attr(CONSTANTS.HREF),
+                url: URL.BASE + $(el).find(SELECTORS.URL).attr(CONSTANTS.HREF),
                 // .first() is required because the price container holds two .value spans
                 // (regular price + sale price); we always want the first one.
                 price: $(el).find(SELECTORS.PRICE).first().text().trim(),
