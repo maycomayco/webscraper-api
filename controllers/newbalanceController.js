@@ -20,6 +20,12 @@ const CONSTANTS = {
   TITLE: "title",
 };
 
+/**
+ * Retrieves Hierro shoes from a specified URL and sends the scraped data as a response.
+ * @param {Object} req - The request object.
+ * @param {Object} res - The response object.
+ * @returns {Promise<void>} - A promise that resolves when the data is sent as a response.
+ */
 export const getHierroShoes = async (req, res) => {
   try {
     const $ = await scrape(URL.HIERRO_SHOES);
@@ -38,7 +44,6 @@ export const getHierroShoes = async (req, res) => {
       };
       shoes.push(product);
     });
-    // return { status: 200, data: shoes };
     res.send({ status: 200, data: shoes });
   } catch (error) {
     res.status(500).send({ status: "FAILED", error: error?.message || error });
