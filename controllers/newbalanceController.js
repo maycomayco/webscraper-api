@@ -44,7 +44,7 @@ export const getNewBalanceShoes = async (req, res) => {
         $(SELECTORS.PRODUCTS).each((_, el) => {
             const product = {
                 id: $(el).attr(CONSTANTS.PID),
-                name: $(el).find(SELECTORS.NAME).text().trim(),
+                name: $(el).find(SELECTORS.NAME).first().text().trim(),
                 url: URL.BASE + $(el).find(SELECTORS.URL).attr(CONSTANTS.HREF),
                 // .first() is required because the price container holds two .value spans
                 // (regular price + sale price); we always want the first one.
