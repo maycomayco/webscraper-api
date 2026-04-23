@@ -34,14 +34,13 @@ export const getHierroShoes = async (req, res) => {
                 name: $(el).find(SELECTORS.NAME).text().trim(),
                 url: $(el).find(SELECTORS.URL).attr(CONSTANTS.HREF),
                 price: $(el).find(SELECTORS.PRICE).text(),
-                variant: $(el)
-                    .find(SELECTORS.VARIANT)
-                    .attr(CONSTANTS.TITLE)
-                    .toLocaleLowerCase(),
+                variant: $(el).find(SELECTORS.VARIANT).attr(CONSTANTS.TITLE)?.toLocaleLowerCase() ?? null,
             };
             shoes.push(product);
         });
-        res.send({ status: 200, data: shoes });
+
+        // the 200 status is not needed because the response is already sent with the data
+        res.send({ data: shoes });
     } catch (error) {
         if (error.name === "TimeoutError") {
             return res.status(504).send({ error: "Upstream timeout" });
