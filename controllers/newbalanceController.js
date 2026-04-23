@@ -46,6 +46,12 @@ export const getHierroShoes = async (req, res) => {
     });
     res.send({ status: 200, data: shoes });
   } catch (error) {
-    res.status(500).send({ status: "FAILED", error: error?.message || error });
+    if (error.name === "TimeoutError") {
+      return res.status(504).send({ error: "Upstream timeout" });
+    }
+    if (error.message?.startsWith("Upstream ")) {
+      return res.status(502).send({ error: error.message });
+    }
+    res.status(500).send({ error: error?.message || "Internal error" });
   }
 };
