@@ -5,16 +5,24 @@ const URL = {
 };
 
 const SELECTORS = {
-    PRODUCTS: ".prd",
-    NAME: ".item-title > a",
-    URL: ".item-title > a",
-    PRICE: ".item-price .price",
-    VARIANT: ".item-img > a",
+    PRODUCTS: "div.product[data-pid]",
+    NAME: ".pdp-link > a.link",
+    URL: ".pdp-link > a.link",
+    PRICE: ".price .sales .value",
+    COLOR_SWATCHES: ".color-swatches",
+    SWATCH_LINK: "a.swatch-link",
 };
 
 const CONSTANTS = {
     HREF: "href",
-    TITLE: "title",
+};
+
+const getVariants = ($, el) => {
+    if ($(el).find(SELECTORS.COLOR_SWATCHES).length === 0) return null;
+    return $(el).find(SELECTORS.SWATCH_LINK).map((_, a) => {
+        const value = $(a).attr("data-value") ?? "";
+        return value.slice(value.indexOf("-") + 1);
+    }).get();
 };
 
 /**
@@ -23,7 +31,7 @@ const CONSTANTS = {
  * @param {Object} res - The response object.
  * @returns {Promise<void>} - A promise that resolves when the data is sent as a response.
  */
-export const getHierroShoes = async (req, res) => {
+export const getNewBalanceShoes = async (req, res) => {
     try {
         const $ = await scrape(URL.TRAIL_RUNNING_SHOES_8_5_SIZE);
         const shoes = [];
@@ -33,13 +41,12 @@ export const getHierroShoes = async (req, res) => {
                 id: idx,
                 name: $(el).find(SELECTORS.NAME).text().trim(),
                 url: $(el).find(SELECTORS.URL).attr(CONSTANTS.HREF),
-                price: $(el).find(SELECTORS.PRICE).text(),
-                variant: $(el).find(SELECTORS.VARIANT).attr(CONSTANTS.TITLE)?.toLocaleLowerCase() ?? null,
+                price: $(el).find(SELECTORS.PRICE).first().text().trim(),
+                variants: getVariants($, el),
             };
             shoes.push(product);
         });
 
-        // the 200 status is not needed because the response is already sent with the data
         res.send({ data: shoes });
     } catch (error) {
         if (error.name === "TimeoutError") {
