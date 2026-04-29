@@ -5,6 +5,10 @@ const URL = {
     TRAIL_RUNNING_SHOES_8_5_SIZE: "https://www.newbalance.com.ar/running/zapatillas/trail/?cgid=running-zapatillas-trail&prefn1=Gender&prefv1=Mens&prefn2=size&prefv2=8.5&srule=price-high-to-low&start=0&sz=9"
 };
 
+const SOURCE = {
+    SITE: "New Balance",
+};
+
 const SELECTORS = {
     PRODUCTS: "div.product[data-pid]",
     NAME: ".pdp-link > a.link",
@@ -61,7 +65,13 @@ export const getNewBalanceShoes = async (req, res) => {
             return res.status(502).send({ error: "No products parsed from upstream page" });
         }
 
-        res.send({ data: shoes });
+        const source = {
+            site: SOURCE.SITE,
+            baseUrl: URL.BASE,
+            listingUrl: URL.TRAIL_RUNNING_SHOES_8_5_SIZE,
+        };
+
+        res.send({ source, data: shoes });
     } catch (error) {
         if (error.name === "TimeoutError") {
             return res.status(504).send({ error: "Upstream timeout" });

@@ -226,3 +226,5 @@ dist
 # .pnp.*
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,linux,visualstudiocode,node,yarn
+
+AGENTS.local.md
