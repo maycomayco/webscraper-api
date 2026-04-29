@@ -5,6 +5,10 @@ const URL = {
     LISTING_8_5_SIZE: "https://saucony.com.ar/hombre/calzado1/tipo1/running1/?mpage=2&Talle=Us%208.5%20%2F%2026%2C5%20Cm",
 };
 
+const SOURCE = {
+    SITE: "Saucony",
+};
+
 const SELECTORS = {
     PRODUCTS: ".js-item-product",
     NAME: ".js-item-name",
@@ -39,7 +43,13 @@ export const getSauconyShoes = async (req, res) => {
             return res.status(502).send({ error: "No products parsed from upstream page" });
         }
 
-        res.send({ data: shoes });
+        const source = {
+            site: SOURCE.SITE,
+            baseUrl: URL.BASE,
+            listingUrl: URL.LISTING_8_5_SIZE,
+        };
+
+        res.send({ source, data: shoes });
     } catch (error) {
         if (error.name === "TimeoutError") {
             return res.status(504).send({ error: "Upstream timeout" });

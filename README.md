@@ -11,9 +11,9 @@ A small REST API that scrapes e-commerce sites and returns the results as JSON. 
 ## Getting started
 
 ```bash
-yarn install
-yarn dev      # starts nodemon on port 3001
-yarn start    # runs the server with node
+pnpm install
+pnpm dev      # starts nodemon on port 3001
+pnpm start    # runs the server with node
 ```
 
 Override the port with the `PORT` environment variable.
@@ -24,24 +24,50 @@ All routes are served under `/api/v1`.
 
 | Method | Path          | Description                                    |
 | ------ | ------------- | ---------------------------------------------- |
-| GET    | `/newbalance` | Returns New Balance Hierro shoes from NB Argentina |
+| GET    | `/newbalance` | Returns New Balance trail running shoes (size 8.5) from NB Argentina |
+| GET    | `/saucony`    | Returns Saucony running shoes (size US 8.5) from Saucony Argentina |
 
-Example response:
+### Response Format
+
+Each endpoint returns a top-level `source` object with metadata about the scrape, alongside a `data` array of products:
 
 ```json
 {
-  "status": 200,
+  "source": {
+    "site": "New Balance",
+    "baseUrl": "https://www.newbalance.com.ar",
+    "listingUrl": "https://www.newbalance.com.ar/running/zapatillas/trail/?cgid=running-zapatillas-trail&prefn1=Gender&prefv1=Mens&prefn2=size&prefv2=8.5&srule=price-high-to-low&start=0&sz=9"
+  },
   "data": [
     {
-      "id": 0,
-      "name": "Fresh Foam X Hierro v7",
-      "url": "https://www.newbalance.com.ar/...",
-      "price": "$ 189.999",
-      "variant": "black"
+      "id": "N1T000338",
+      "name": "Fresh Foam X Hierro v9 GORE-TEX®",
+      "url": "https://www.newbalance.com.ar/hombre-zapatillas-N1T000338.html",
+      "price": "$269.999",
+      "variants": ["Black/Faded Black/Castlerock", "Mosaic Green/Permafrost/Black"]
+    },
+    {
+      "id": "N1T000258",
+      "name": "Fresh Foam X Hierro v9",
+      "url": "https://www.newbalance.com.ar/hombre-zapatillas-N1T000258.html",
+      "price": "$239.999",
+      "variants": ["Urgent Red/Reflection/Raincloud", "Black Cement/Black"]
     }
   ]
 }
 ```
+
+**Response fields:**
+
+- `source.site`: The brand name
+- `source.baseUrl`: The website base URL for the scraper
+- `source.listingUrl`: The specific product listing URL that was scraped
+- `data`: Array of products from the listing
+  - `id`: Product identifier
+  - `name`: Product display name
+  - `url`: Link to the product detail page
+  - `price`: Price as displayed on the site (includes currency symbol)
+  - `variants`: Array of color/style variants, or `null` if unavailable
 
 ## Project structure
 

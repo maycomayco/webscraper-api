@@ -1,13 +1,5 @@
 # AGENTS.md
 
-## Commands
-
-- `yarn dev` — run with nodemon (auto-reload) on port `3001` (override via `PORT` env var).
-- `yarn start` — run production server (`node index.js`).
-- No test, lint, or build tooling is configured.
-
-Node version is pinned by `.node-version` to **18.15.0**. The project uses native ESM (`"type": "module"`), so all relative imports must include the `.js` extension.
-
 ## Architecture
 
 The app is a thin Express API that scrapes e-commerce sites and returns JSON. It is organized in three clearly separated layers, and any new scraper should preserve that separation:
