@@ -68,6 +68,12 @@ const initializeClient = async () => {
  * @returns {Error}
  */
 const classifyError = (err) => {
+  // Already-typed errors pass through unchanged — prevents double-wrapping
+  // when an inner catch already classified and then withClient classifies again.
+  if (err instanceof YoutubeMusicAuthError || err instanceof YoutubeMusicRateLimitError) {
+    return err;
+  }
+
   // Auth failures
   if (
     err.status === 401 ||

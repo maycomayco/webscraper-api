@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
-    "test": "echo \"See issue #19\" && exit 0"
+    "test": "echo \"See issue #19\" && exit 1"
   },
   "keywords": [],
   "author": "",
