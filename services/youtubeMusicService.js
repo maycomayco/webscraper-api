@@ -77,6 +77,7 @@ const classifyError = (err) => {
   // Auth failures
   if (
     err.status === 401 ||
+    err.message?.includes("status code 401") ||
     err.message?.includes("auth") ||
     err.message?.includes("cookie") ||
     err.message?.includes("invalid")
@@ -87,7 +88,7 @@ const classifyError = (err) => {
   }
 
   // Rate limits
-  if (err.status === 429 || err.message?.includes("rate")) {
+  if (err.status === 429 || err.message?.includes("status code 429") || err.message?.includes("rate")) {
     return new YoutubeMusicRateLimitError(
       "YouTube Music rate limited — wait before retrying",
     );
@@ -109,6 +110,7 @@ const withClient = async (fn) => {
     const yt = await initializeClient();
     return await fn(yt);
   } catch (err) {
+    console.warn(`[youtubeMusicService] Error: ${err.constructor.name} | status: ${err.status} | message: ${err.message}`);
     const typed = classifyError(err);
     if (typed instanceof YoutubeMusicAuthError) {
       client = null;
@@ -148,7 +150,7 @@ export const searchArtist = (name) =>
 
     return shelf.contents.slice(0, 20).map((item) => ({
       title: item.flex_columns?.[0]?.title?.text ?? "",
-      videoId: item.id ?? "",
+      videoId: item.flex_columns?.[0]?.title?.runs?.[0]?.endpoint?.payload?.videoId ?? "",
       artist: item.artists?.[0]?.name ?? "",
       duration: item.duration?.seconds ?? 0,
     }));
@@ -172,11 +174,13 @@ export const searchSong = (artist, song) =>
       return null;
     }
 
+    const item = shelf.contents[0];
+
     const track = {
-      title: shelf.contents[0].flex_columns?.[0]?.title?.text ?? "",
-      videoId: shelf.contents[0].id ?? "",
-      artist: shelf.contents[0].artists?.[0]?.name ?? "",
-      duration: shelf.contents[0].duration?.seconds ?? 0,
+      title: item.flex_columns?.[0]?.title?.text ?? "",
+      videoId: item.flex_columns?.[0]?.title?.runs?.[0]?.endpoint?.payload?.videoId ?? "",
+      artist: item.artists?.[0]?.name ?? "",
+      duration: item.duration?.seconds ?? 0,
     };
 
     return track;
@@ -214,24 +218,24 @@ export const createPlaylist = (title, description) =>
  *
  * @param {string} playlistId - Target playlist ID.
  * @param {string[]} videoIds - Video IDs to add.
- * @returns {Promise<{ trackCount: number, skipped: number }>}
+ * @returns {Promise<{ added: string[], failed: Array<{ videoId: string, reason: string }> }>}
  */
 export const addTracksToPlaylist = (playlistId, videoIds) =>
   withClient(async (yt) => {
-    let trackCount = 0;
-    let skipped = 0;
+    const added = [];
+    const failed = [];
 
     for (const videoId of videoIds) {
       try {
         await yt.playlist.addVideos(playlistId, [videoId]);
-        trackCount++;
+        added.push(videoId);
       } catch (err) {
         // 409 = track already in playlist (duplicate) — count as success
         if (err.message?.includes("409")) {
           console.info(
             `[youtubeMusicService] videoId ${videoId} already in playlist — skipping`,
           );
-          trackCount++;
+          added.push(videoId);
           continue;
         }
 
@@ -242,14 +246,14 @@ export const addTracksToPlaylist = (playlistId, videoIds) =>
           initPromise = null;
           throw new YoutubeMusicAuthError(
             "YouTube Music auth failed during batch add — refresh YOUTUBE_MUSIC_COOKIES. " +
-              `Added ${trackCount} tracks before failure.`,
+              `Added ${added.length} tracks before failure.`,
           );
         }
         // Otherwise skip this track and continue
         console.warn(
           `[youtubeMusicService] Skipping videoId ${videoId}: ${err.message}`,
         );
-        skipped++;
+        failed.push({ videoId, reason: err.message || "Unknown error" });
       }
 
       // Throttle to avoid rate limits
@@ -258,5 +262,5 @@ export const addTracksToPlaylist = (playlistId, videoIds) =>
       }
     }
 
-    return { trackCount, skipped };
+    return { added, failed };
   });

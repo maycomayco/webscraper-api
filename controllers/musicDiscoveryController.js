@@ -145,24 +145,29 @@ export const getMusicDiscovery = async (req, res) => {
 
     // Step 2 — search each track on YouTube Music
     const parsedTracks = result.data; // Array<{ artist, song }>
-    const tracksAdded = [];
-    const tracksNotFound = [];
+    const tracksFound = [];
+    const tracksNotAdded = [];
+
+    console.info(`[getMusicDiscovery] Searching ${parsedTracks.length} tracks on YouTube Music`);
 
     for (const track of parsedTracks) {
       try {
+        console.info(`[getMusicDiscovery] Searching: "${track.artist} - ${track.song}"`);
         const match = await searchSong(track.artist, track.song);
 
         if (match && match.videoId) {
-          tracksAdded.push({
+          console.info(`[getMusicDiscovery] ✓ Found: "${match.title}" (${match.videoId})`);
+          tracksFound.push({
             title: match.title,
             artist: match.artist || track.artist,
             videoId: match.videoId,
           });
         } else {
-          tracksNotFound.push({
+          console.warn(`[getMusicDiscovery] ✗ Not found: "${track.artist} - ${track.song}"`);
+          tracksNotAdded.push({
             title: track.song,
             artist: track.artist,
-            reason: "No results found on YouTube Music",
+            reason: "Not found on YouTube Music",
           });
         }
       } catch (err) {
@@ -171,10 +176,13 @@ export const getMusicDiscovery = async (req, res) => {
       }
     }
 
+    console.info(`[getMusicDiscovery] Search complete: ${tracksFound.length} found, ${tracksNotAdded.length} not found`);
+
     // Step 3 — create playlist (only if we found tracks)
     let playlist = null;
+    const tracksAdded = [];
 
-    if (tracksAdded.length > 0) {
+    if (tracksFound.length > 0) {
       const created = await createPlaylist(playlistTitle());
       playlist = {
         title: created.title,
@@ -183,29 +191,35 @@ export const getMusicDiscovery = async (req, res) => {
       };
 
       // Step 4 — add found tracks to the playlist
-      const videoIds = tracksAdded.map((t) => t.videoId);
+      const videoIds = tracksFound.map((t) => t.videoId);
       const addResult = await addTracksToPlaylist(created.playlistId, videoIds);
-      // addResult tracks which videoIds were successfully added (including
-      // 409 duplicates) and how many were skipped (unavailable). We do NOT
-      // try to reclassify tracksAdded items — the index-based approach would
-      // be wrong when skips are interleaved with successes. Instead we report
-      // the add result alongside the search results so the caller can reconcile.
-      playlist.addToPlaylist = {
-        attempted: videoIds.length,
-        added: addResult.trackCount,
-        skipped: addResult.skipped,
-      };
+
+      // Classify added vs failed
+      const addedSet = new Set(addResult.added);
+      for (const track of tracksFound) {
+        if (addedSet.has(track.videoId)) {
+          tracksAdded.push({ title: track.title, artist: track.artist });
+        }
+      }
+      for (const fail of addResult.failed) {
+        const track = tracksFound.find((t) => t.videoId === fail.videoId);
+        tracksNotAdded.push({
+          title: track?.title ?? fail.videoId,
+          artist: track?.artist ?? "",
+          reason: `Failed to add to playlist: ${fail.reason}`,
+        });
+      }
     }
 
-    // Step 5 — build and return report (strip videoId from response)
+    // Step 5 — build and return report
     const report = {
       playlist,
-      tracksAdded: tracksAdded.map(({ title, artist }) => ({ title, artist })),
-      tracksNotFound,
+      tracksAdded,
+      tracksNotAdded,
       summary: {
         total: parsedTracks.length,
         added: tracksAdded.length,
-        notFound: tracksNotFound.length,
+        notAdded: tracksNotAdded.length,
       },
     };
 
