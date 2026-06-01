@@ -6,17 +6,20 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "echo \"See issue #19\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "cheerio": "1.0.0-rc.12",
+    "dotenv": "^17.4.2",
     "express": "4.18.2",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.2.0",
-    "node-cache": "^5.1.2"
+    "node-cache": "^5.1.2",
+    "youtubei.js": "^17.0.1"
   },
   "devDependencies": {
     "nodemon": "2.0.20"
