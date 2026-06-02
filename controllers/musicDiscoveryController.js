@@ -1,4 +1,5 @@
 import { discover } from "../services/musicDiscoveryService.js";
+import { fetchFeed } from "../services/rssService.js";
 import {
   searchSong,
   createPlaylist,
@@ -78,16 +79,69 @@ const buildItem = (artist, song) => {
   };
 };
 
-// --- IndieHoy Source Config ---------------------------------------------------
+// --- Article Type Config ------------------------------------------------------
+// Maps each type to its RSS title regex and the response field name for items.
+
+const ARTICLE_TYPES = {
+  tracks: { regex: /lanzamientos.*para\s+escuchar/i, responseKey: "song" },
+  albums: { regex: /discos.*para\s+escuchar/i, responseKey: "album" },
+};
+
+// --- Category Blocklist -------------------------------------------------------
+// IndieHoy tags generic categories on every article; these are not artists.
+
+const CATEGORY_BLOCKLIST = new Set([
+  "Música",
+  "Indie",
+  "Rock",
+  "Pop",
+  "Lanzamientos",
+]);
+
+// --- RSS / Source Config ------------------------------------------------------
+
+const BASE_RSS_URL = "https://indiehoy.com/tag/lanzamientos";
 
 const URL = {
   BASE: "https://indiehoy.com",
-  ARTICLE:
-    "https://indiehoy.com/noticias/10-lanzamientos-para-escuchar-esta-semana-2026-05-27/",
 };
 
 const SOURCE = {
   SITE: "IndieHoy",
+};
+
+// --- RSS Helpers --------------------------------------------------------------
+
+/**
+ * Resolves the most recent matching article URL from the IndieHoy RSS feed.
+ * Fetches the feed, filters items by type-specific title regex, and returns
+ * the first (most recent) match.
+ *
+ * @param {string} type - Article type key (e.g. "tracks", "albums").
+ * @param {number} year - Year to build the RSS URL for.
+ * @returns {Promise<{ link: string, title: string, pubDate: string, categories: string[] } | null>}
+ * @throws {Error} "RSS_UNAVAILABLE" on fetch/parse failure (propagated from fetchFeed).
+ */
+const resolveArticleUrl = async (type, year) => {
+  const rssUrl = `${BASE_RSS_URL}-${year}/feed/`;
+  const items = await fetchFeed(rssUrl);
+
+  const matched = items.filter((item) =>
+    ARTICLE_TYPES[type].regex.test(item.title),
+  );
+
+  // RSS feeds list newest first; the first match is the most recent article.
+  return matched.length > 0 ? matched[0] : null;
+};
+
+/**
+ * Filters generic/blocklisted terms from RSS categories to extract artist names.
+ *
+ * @param {string[]} categories - Raw RSS category values.
+ * @returns {string[]} Categories minus blocklisted entries.
+ */
+const extractArtists = (categories) => {
+  return categories.filter((c) => !CATEGORY_BLOCKLIST.has(c));
 };
 
 // --- Helpers ------------------------------------------------------------------
@@ -110,16 +164,13 @@ const playlistTitle = () => `IndieHoy · descubrimientos · ${todayUTC()}`;
 // --- Pipeline Orchestration ---------------------------------------------------
 
 /**
- * Full discovery pipeline:
- *  1. Scrape the IndieHoy article for artist/song pairs
- *  2. Search each pair on YouTube Music
- *  3. Create a playlist with the weekly naming convention
- *  4. Add found tracks to the playlist
- *  5. Return a structured report
+ * Full music discovery endpoint.
  *
- * Partial failures (some tracks not found) are OK — they are reported but
- * do not fail the whole request. Only auth/rate-limit/unexpected errors
- * trigger an HTTP error response.
+ * Flow:
+ *  1. Parse `?type` query param (default: "tracks", allowed: "tracks" | "albums").
+ *  2. Resolve article URL from IndieHoy RSS feed (year fallback).
+ *  3. Scrape the resolved article and parse with indieHoyParser.
+ *  4. Return a typed JSON envelope with artist/items.
  *
  * @param {Object} req - Express request object.
  * @param {Object} res - Express response object.
@@ -127,51 +178,71 @@ const playlistTitle = () => `IndieHoy · descubrimientos · ${todayUTC()}`;
  */
 export const getMusicDiscovery = async (req, res) => {
   try {
-    // Step 1 — scrape and parse
+    // Step 1 — parse and validate type param
+    const type = req.query.type || "tracks";
+
+    if (!ARTICLE_TYPES[type]) {
+      return res.status(400).json({
+        status: "FAILED",
+        error: `Invalid type. Allowed: ${Object.keys(ARTICLE_TYPES).join(", ")}`,
+      });
+    }
+
+    // Step 2 — resolve article URL from RSS (with year fallback)
+    const currentYear = new Date().getFullYear();
+
+    let matchedItem = await resolveArticleUrl(type, currentYear);
+    if (!matchedItem) {
+      matchedItem = await resolveArticleUrl(type, currentYear - 1);
+    }
+
+    if (!matchedItem) {
+      return res.status(404).json({
+        status: "FAILED",
+        error: `No matching article found for type: ${type}`,
+      });
+    }
+
+    // Step 3 — scrape and parse
     const result = await discover(
       { site: SOURCE.SITE, baseUrl: URL.BASE, parser: indieHoyParser },
-      URL.ARTICLE,
+      matchedItem.link,
     );
 
     if (result.data.length === 0) {
       console.warn(
         "[getMusicDiscovery] No music entries parsed — selector may be stale or page content changed",
       );
-      return res.status(502).send({
+      return res.status(502).json({
         status: "FAILED",
         error: "No music entries parsed from upstream page",
       });
     }
 
-    // Step 2 — search each track on YouTube Music
+    // Step 4 — search each track on YouTube Music
     const parsedTracks = result.data; // Array<{ artist, song }>
     const tracksAdded = [];
     const tracksNotFound = [];
 
     for (const track of parsedTracks) {
-      try {
-        const match = await searchSong(track.artist, track.song);
+      const match = await searchSong(track.artist, track.song);
 
-        if (match && match.videoId) {
-          tracksAdded.push({
-            title: match.title,
-            artist: match.artist || track.artist,
-            videoId: match.videoId,
-          });
-        } else {
-          tracksNotFound.push({
-            title: track.song,
-            artist: track.artist,
-            reason: "No results found on YouTube Music",
-          });
-        }
-      } catch (err) {
-        // searchSong failures (auth, rate-limit) are fatal — propagate
-        throw err;
+      if (match && match.videoId) {
+        tracksAdded.push({
+          title: match.title,
+          artist: match.artist || track.artist,
+          videoId: match.videoId,
+        });
+      } else {
+        tracksNotFound.push({
+          title: track.song,
+          artist: track.artist,
+          reason: "No results found on YouTube Music",
+        });
       }
     }
 
-    // Step 3 — create playlist (only if we found tracks)
+    // Step 5 — create playlist (only if we found tracks)
     let playlist = null;
 
     if (tracksAdded.length > 0) {
@@ -182,23 +253,33 @@ export const getMusicDiscovery = async (req, res) => {
         url: created.url,
       };
 
-      // Step 4 — add found tracks to the playlist
+      // Step 6 — add found tracks to the playlist
       const videoIds = tracksAdded.map((t) => t.videoId);
       const addResult = await addTracksToPlaylist(created.playlistId, videoIds);
-      // addResult tracks which videoIds were successfully added (including
-      // 409 duplicates) and how many were skipped (unavailable). We do NOT
-      // try to reclassify tracksAdded items — the index-based approach would
-      // be wrong when skips are interleaved with successes. Instead we report
-      // the add result alongside the search results so the caller can reconcile.
-      playlist.addToPlaylist = {
-        attempted: videoIds.length,
-        added: addResult.trackCount,
-        skipped: addResult.skipped,
-      };
+
+      // Reconcile: move skipped tracks from tracksAdded to tracksNotFound
+      if (addResult.skipped > 0) {
+        const actuallyAdded = tracksAdded.slice(0, addResult.trackCount);
+        const skippedTracks = tracksAdded.slice(addResult.trackCount);
+        skippedTracks.forEach((t) =>
+          tracksNotFound.push({
+            title: t.title,
+            artist: t.artist,
+            reason: "Skipped during playlist add (unavailable)",
+          }),
+        );
+        tracksAdded.length = 0;
+        tracksAdded.push(...actuallyAdded);
+      }
     }
 
-    // Step 5 — build and return report (strip videoId from response)
+    // Step 7 — build and return report
     const report = {
+      source: {
+        url: matchedItem.link,
+        title: matchedItem.title,
+        date: matchedItem.pubDate || todayUTC(),
+      },
       playlist,
       tracksAdded: tracksAdded.map(({ title, artist }) => ({ title, artist })),
       tracksNotFound,
@@ -211,6 +292,14 @@ export const getMusicDiscovery = async (req, res) => {
 
     return res.send(report);
   } catch (err) {
+    // RSS feed errors
+    if (err.message === "RSS_UNAVAILABLE") {
+      return res.status(502).json({
+        status: "FAILED",
+        error: "RSS unavailable",
+      });
+    }
+
     if (err instanceof YoutubeMusicAuthError) {
       return res.status(401).json({
         status: "FAILED",

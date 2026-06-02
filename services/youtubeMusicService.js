@@ -148,15 +148,51 @@ export const searchArtist = (name) =>
 
     return shelf.contents.slice(0, 20).map((item) => ({
       title: item.flex_columns?.[0]?.title?.text ?? "",
-      videoId: item.id ?? "",
+      videoId:
+        item.id ??
+        item.flex_columns?.[0]?.title?.runs?.[0]?.endpoint?.payload?.videoId ??
+        "",
       artist: item.artists?.[0]?.name ?? "",
       duration: item.duration?.seconds ?? 0,
     }));
   });
 
 /**
+ * Normalizes a string for fuzzy comparison: lowercase, strip accents,
+ * remove punctuation and extra whitespace.
+ * @param {string} str
+ * @returns {string}
+ */
+const normalize = (str) =>
+  str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/[^a-z0-9\s]/g, "") // strip punctuation
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * Checks if two strings are similar enough to be considered a match.
+ * Uses token overlap: what fraction of the expected tokens appear in the candidate.
+ * @param {string} expected - The title we searched for.
+ * @param {string} candidate - The title YouTube Music returned.
+ * @returns {boolean}
+ */
+const isTitleMatch = (expected, candidate) => {
+  const expTokens = normalize(expected).split(" ").filter(Boolean);
+  const candNorm = normalize(candidate);
+
+  if (expTokens.length === 0) return false;
+
+  const hits = expTokens.filter((t) => candNorm.includes(t)).length;
+  return hits / expTokens.length >= 0.5;
+};
+
+/**
  * Searches YouTube Music for a specific song by artist.
- * Returns the single best match or null if nothing found.
+ * Iterates through search results and picks the first one whose title
+ * matches the expected song (fuzzy). Returns null if no match passes validation.
  *
  * @param {string} artist - Artist name.
  * @param {string} song - Song title.
@@ -172,14 +208,29 @@ export const searchSong = (artist, song) =>
       return null;
     }
 
-    const track = {
-      title: shelf.contents[0].flex_columns?.[0]?.title?.text ?? "",
-      videoId: shelf.contents[0].id ?? "",
-      artist: shelf.contents[0].artists?.[0]?.name ?? "",
-      duration: shelf.contents[0].duration?.seconds ?? 0,
-    };
+    // Iterate results and pick the first whose title matches the expected song
+    for (const item of shelf.contents.slice(0, 5)) {
+      const title = item.flex_columns?.[0]?.title?.text ?? "";
 
-    return track;
+      if (!isTitleMatch(song, title)) continue;
+
+      const videoId =
+        item.id ??
+        item.flex_columns?.[0]?.title?.runs?.[0]?.endpoint?.payload?.videoId ??
+        "";
+
+      if (!videoId) continue;
+
+      return {
+        title,
+        videoId,
+        artist: item.artists?.[0]?.name ?? "",
+        duration: item.duration?.seconds ?? 0,
+      };
+    }
+
+    // No result matched the expected title
+    return null;
   });
 
 /**
