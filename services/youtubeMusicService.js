@@ -64,6 +64,16 @@ const initializeClient = async () => {
 
 /**
  * Classifies raw errors from youtubei.js into typed application errors.
+ *
+ * Detection strategy (in order):
+ *  1. Already-typed errors pass through (prevents double-wrapping).
+ *  2. Explicit status property (future-proof if youtubei.js adds it).
+ *  3. HTTP status code embedded in message string — e.g.
+ *     "Request to ... failed with status code 401" (HTTPClient.js:94).
+ *  4. Auth sentinel messages — e.g.
+ *     "You must be signed in to perform this operation." (Session.js, Studio.js).
+ *  5. Keyword fallback for edge cases.
+ *
  * @param {Error} err
  * @returns {Error}
  */
@@ -74,20 +84,29 @@ const classifyError = (err) => {
     return err;
   }
 
-  // Auth failures
+  const msg = err.message || "";
+
+  // --- Auth failures ---
   if (
     err.status === 401 ||
-    err.message?.includes("auth") ||
-    err.message?.includes("cookie") ||
-    err.message?.includes("invalid")
+    msg.includes("status code 401") ||
+    msg.includes("UNAUTHENTICATED") ||
+    msg.includes("You must be signed in") ||
+    msg.includes("auth") ||
+    msg.includes("cookie") ||
+    msg.includes("invalid")
   ) {
     return new YoutubeMusicAuthError(
       "YouTube Music auth failed — refresh YOUTUBE_MUSIC_COOKIES",
     );
   }
 
-  // Rate limits
-  if (err.status === 429 || err.message?.includes("rate")) {
+  // --- Rate limits ---
+  if (
+    err.status === 429 ||
+    msg.includes("status code 429") ||
+    msg.includes("rate")
+  ) {
     return new YoutubeMusicRateLimitError(
       "YouTube Music rate limited — wait before retrying",
     );
