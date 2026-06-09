@@ -1,4 +1,8 @@
 import { scrape } from "../services/scraperService.js";
+import {
+    sendFailure,
+    sendSanitizedError,
+} from "../services/httpErrorService.js";
 
 const URL = {
     BASE: "https://www.newbalance.com.ar",
@@ -61,8 +65,17 @@ export const getNewBalanceShoes = async (req, res) => {
         // Empty result means the upstream returned 200 but the page content changed
         // (bot-detection wall, HTML restructure, etc.) — treat it as a gateway failure.
         if (shoes.length === 0) {
-            console.warn("[getNewBalanceShoes] No products found — selector may be stale or page content changed");
-            return res.status(502).send({ error: "No products parsed from upstream page" });
+            return sendFailure(res, {
+                status: 502,
+                publicMessage: "No products parsed from upstream page",
+                handler: "getNewBalanceShoes",
+                logLevel: "warn",
+                logContext: {
+                    site: SOURCE.SITE,
+                    listingUrl: URL.TRAIL_RUNNING_SHOES_8_5_SIZE,
+                    productSelector: SELECTORS.PRODUCTS,
+                },
+            });
         }
 
         const source = {
@@ -73,12 +86,12 @@ export const getNewBalanceShoes = async (req, res) => {
 
         res.send({ source, data: shoes });
     } catch (error) {
-        if (error.name === "TimeoutError") {
-            return res.status(504).send({ error: "Upstream timeout" });
-        }
-        if (error.message?.startsWith("Upstream ")) {
-            return res.status(502).send({ error: error.message });
-        }
-        res.status(500).send({ error: error?.message || "Internal error" });
+        return sendSanitizedError(res, error, {
+            handler: "getNewBalanceShoes",
+            logContext: {
+                site: SOURCE.SITE,
+                listingUrl: URL.TRAIL_RUNNING_SHOES_8_5_SIZE,
+            },
+        });
     }
 };

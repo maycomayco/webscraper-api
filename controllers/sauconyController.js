@@ -1,4 +1,8 @@
 import { scrape } from "../services/scraperService.js";
+import {
+  sendFailure,
+  sendSanitizedError,
+} from "../services/httpErrorService.js";
 
 const URL = {
   BASE: "https://www.saucony.com.ar",
@@ -33,18 +37,31 @@ export const getSauconyShoes = async (req, res) => {
       // Distinguish by checking if the "no products" message exists
       const noProductsMessage = $("h6.text-center").text();
       if (noProductsMessage.includes("No tenemos productos")) {
-        console.warn("[getSauconyShoes] Upstream returned 0 products for this filter combination");
-        return res.status(404).send({
-          error: "No products found for the specified model and size",
-          detail: "The upstream page confirms no products match this filter",
+        return sendFailure(res, {
+          status: 404,
+          publicMessage: "No products found for the specified model and size",
+          handler: "getSauconyShoes",
+          logLevel: "warn",
+          logContext: {
+            site: SOURCE.SITE,
+            listingUrl: URL.LISTING_GUIDE_8_5,
+            reason: "upstream_empty_listing",
+          },
         });
       }
 
       // Selector missing — page structure likely changed
-      console.error("[getSauconyShoes] Product selector not found — page structure may have changed");
-      return res.status(502).send({
-        error: "Product selector not found on upstream page",
-        detail: `Selector '${SELECTORS.PRODUCTS}' returned 0 elements. Page structure may have changed.`,
+      return sendFailure(res, {
+        status: 502,
+        publicMessage: "Unable to parse upstream product listing",
+        handler: "getSauconyShoes",
+        logLevel: "error",
+        logContext: {
+          site: SOURCE.SITE,
+          listingUrl: URL.LISTING_GUIDE_8_5,
+          productSelector: SELECTORS.PRODUCTS,
+          reason: "product_selector_missing",
+        },
       });
     }
 
@@ -69,12 +86,12 @@ export const getSauconyShoes = async (req, res) => {
 
     res.send({ source, data: shoes });
   } catch (error) {
-    if (error.name === "TimeoutError") {
-      return res.status(504).send({ error: "Upstream timeout" });
-    }
-    if (error.message?.startsWith("Upstream ")) {
-      return res.status(502).send({ error: error.message });
-    }
-    res.status(500).send({ error: error?.message || "Internal error" });
+    return sendSanitizedError(res, error, {
+      handler: "getSauconyShoes",
+      logContext: {
+        site: SOURCE.SITE,
+        listingUrl: URL.LISTING_GUIDE_8_5,
+      },
+    });
   }
 };

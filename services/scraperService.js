@@ -2,6 +2,40 @@ import NodeCache from "node-cache";
 import * as cheerio from "cheerio";
 import { FETCH_TIMEOUT_MS, CACHE_TTL_S } from "../constants/config.js";
 
+export class ScraperValidationError extends Error {
+    constructor(message, details = {}) {
+        super(message);
+        this.name = "ScraperValidationError";
+        this.code = "SCRAPER_VALIDATION_FAILED";
+        this.status = 500;
+        this.details = details;
+        this.cause = details.cause;
+    }
+}
+
+export class UpstreamTimeoutError extends Error {
+    constructor(message, details = {}) {
+        super(message);
+        this.name = "UpstreamTimeoutError";
+        this.code = "UPSTREAM_TIMEOUT";
+        this.status = 504;
+        this.details = details;
+        this.cause = details.cause;
+    }
+}
+
+export class UpstreamRequestError extends Error {
+    constructor(message, details = {}) {
+        super(message);
+        this.name = "UpstreamRequestError";
+        this.code = "UPSTREAM_REQUEST_FAILED";
+        this.status = 502;
+        this.upstreamStatus = details.upstreamStatus;
+        this.details = details;
+        this.cause = details.cause;
+    }
+}
+
 // Cache raw HTML keyed by URL. We store HTML strings (not Cheerio objects)
 // because Cheerio instances have internal state that can't be safely serialized.
 // checkperiod: 120s — how often node-cache scans for expired keys.
@@ -114,7 +148,10 @@ export const scrape = async (url) => {
     // SSRF safety net — blocks private IPs and non-https schemes
     const { valid, reason } = validateUrl(url);
     if (!valid) {
-        throw new Error(`SSRF blocked: ${reason}`);
+        throw new ScraperValidationError("Scraper URL validation failed", {
+            reason,
+            url,
+        });
     }
     // Cache-aside: return immediately on hit, skip the network call
     const cached = cache.get(url);
@@ -122,10 +159,30 @@ export const scrape = async (url) => {
         return cheerio.load(cached);
     }
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    let res;
+    try {
+        res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    } catch (error) {
+        if (error?.name === "TimeoutError" || error?.name === "AbortError") {
+            throw new UpstreamTimeoutError("Upstream request timed out", {
+                timeoutMs: FETCH_TIMEOUT_MS,
+                url,
+                cause: error,
+            });
+        }
+
+        throw new UpstreamRequestError("Upstream request failed", {
+            reason: "network_error",
+            url,
+            cause: error,
+        });
+    }
+
     if (!res.ok) {
-        console.error(`[scrape] Upstream error ${res.status} for ${url}`);
-        throw new Error(`Upstream ${res.status}`);
+        throw new UpstreamRequestError("Upstream request failed", {
+            upstreamStatus: res.status,
+            url,
+        });
     }
 
     const html = await res.text();

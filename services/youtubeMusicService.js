@@ -3,18 +3,20 @@ import { Innertube } from "youtubei.js";
 // --- Typed Errors -------------------------------------------------------------
 
 export class YoutubeMusicAuthError extends Error {
-  constructor(message) {
+  constructor(message, details = {}) {
     super(message);
     this.name = "YoutubeMusicAuthError";
     this.code = "AUTH_EXPIRED";
+    this.details = details;
   }
 }
 
 export class YoutubeMusicRateLimitError extends Error {
-  constructor(message) {
+  constructor(message, details = {}) {
     super(message);
     this.name = "YoutubeMusicRateLimitError";
     this.code = "RATE_LIMITED";
+    this.details = details;
   }
 }
 
@@ -38,7 +40,8 @@ const initializeClient = async () => {
     const cookies = process.env.YOUTUBE_MUSIC_COOKIES;
     if (!cookies) {
       throw new YoutubeMusicAuthError(
-        "YouTube Music auth failed — YOUTUBE_MUSIC_COOKIES env var is not set",
+        "YouTube Music auth failed",
+        { reason: "Missing YOUTUBE_MUSIC_COOKIES environment variable" },
       );
     }
 
@@ -97,7 +100,8 @@ const classifyError = (err) => {
     msg.includes("invalid")
   ) {
     return new YoutubeMusicAuthError(
-      "YouTube Music auth failed — refresh YOUTUBE_MUSIC_COOKIES",
+      "YouTube Music auth failed",
+      { reason: "YouTube Music rejected the authenticated request", originalMessage: msg },
     );
   }
 
@@ -108,7 +112,8 @@ const classifyError = (err) => {
     msg.includes("rate")
   ) {
     return new YoutubeMusicRateLimitError(
-      "YouTube Music rate limited — wait before retrying",
+      "YouTube Music rate limited",
+      { reason: "YouTube Music returned a rate limit response", originalMessage: msg },
     );
   }
 
@@ -311,8 +316,12 @@ export const addTracksToPlaylist = (playlistId, videoIds) =>
           client = null;
           initPromise = null;
           throw new YoutubeMusicAuthError(
-            "YouTube Music auth failed during batch add — refresh YOUTUBE_MUSIC_COOKIES. " +
-              `Added ${trackCount} tracks before failure.`,
+            "YouTube Music auth failed during batch add",
+            {
+              reason: "Authentication failed while adding tracks to playlist",
+              addedBeforeFailure: trackCount,
+              originalMessage: err.message,
+            },
           );
         }
         // Otherwise skip this track and continue

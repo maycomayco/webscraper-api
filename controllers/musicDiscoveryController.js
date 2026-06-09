@@ -1,11 +1,13 @@
 import { discover } from "../services/musicDiscoveryService.js";
 import { fetchFeed } from "../services/rssService.js";
 import {
+  sendFailure,
+  sendSanitizedError,
+} from "../services/httpErrorService.js";
+import {
   searchSong,
   createPlaylist,
   addTracksToPlaylist,
-  YoutubeMusicAuthError,
-  YoutubeMusicRateLimitError,
 } from "../services/youtubeMusicService.js";
 
 // --- IndieHoy Parser ----------------------------------------------------------
@@ -177,29 +179,44 @@ const playlistTitle = () => `IndieHoy · descubrimientos · ${todayUTC()}`;
  * @returns {Promise<void>}
  */
 export const getMusicDiscovery = async (req, res) => {
+  let type = "tracks";
+  let matchedItem = null;
+
   try {
     // Step 1 — parse and validate type param
-    const type = req.query.type || "tracks";
+    type = req.query.type || "tracks";
 
     if (!ARTICLE_TYPES[type]) {
-      return res.status(400).json({
-        status: "FAILED",
-        error: `Invalid type. Allowed: ${Object.keys(ARTICLE_TYPES).join(", ")}`,
+      return sendFailure(res, {
+        status: 400,
+        publicMessage: `Invalid type. Allowed: ${Object.keys(ARTICLE_TYPES).join(", ")}`,
+        handler: "getMusicDiscovery",
+        logLevel: "warn",
+        logContext: {
+          providedType: type,
+          allowedTypes: Object.keys(ARTICLE_TYPES),
+        },
       });
     }
 
     // Step 2 — resolve article URL from RSS (with year fallback)
     const currentYear = new Date().getFullYear();
 
-    let matchedItem = await resolveArticleUrl(type, currentYear);
+    matchedItem = await resolveArticleUrl(type, currentYear);
     if (!matchedItem) {
       matchedItem = await resolveArticleUrl(type, currentYear - 1);
     }
 
     if (!matchedItem) {
-      return res.status(404).json({
-        status: "FAILED",
-        error: `No matching article found for type: ${type}`,
+      return sendFailure(res, {
+        status: 404,
+        publicMessage: `No matching article found for type: ${type}`,
+        handler: "getMusicDiscovery",
+        logLevel: "warn",
+        logContext: {
+          type,
+          yearsChecked: [currentYear, currentYear - 1],
+        },
       });
     }
 
@@ -210,12 +227,16 @@ export const getMusicDiscovery = async (req, res) => {
     );
 
     if (result.data.length === 0) {
-      console.warn(
-        "[getMusicDiscovery] No music entries parsed — selector may be stale or page content changed",
-      );
-      return res.status(502).json({
-        status: "FAILED",
-        error: "No music entries parsed from upstream page",
+      return sendFailure(res, {
+        status: 502,
+        publicMessage: "No music entries parsed from upstream page",
+        handler: "getMusicDiscovery",
+        logLevel: "warn",
+        logContext: {
+          type,
+          articleUrl: matchedItem.link,
+          selector: SELECTORS.HEADINGS,
+        },
       });
     }
 
@@ -292,46 +313,12 @@ export const getMusicDiscovery = async (req, res) => {
 
     return res.send(report);
   } catch (err) {
-    // RSS feed errors
-    if (err.message === "RSS_UNAVAILABLE") {
-      return res.status(502).json({
-        status: "FAILED",
-        error: "RSS unavailable",
-      });
-    }
-
-    if (err instanceof YoutubeMusicAuthError) {
-      return res.status(401).json({
-        status: "FAILED",
-        error: err.message,
-      });
-    }
-
-    if (err instanceof YoutubeMusicRateLimitError) {
-      return res.status(429).json({
-        status: "FAILED",
-        error: err.message,
-      });
-    }
-
-    if (err.name === "TimeoutError") {
-      return res.status(504).json({
-        status: "FAILED",
-        error: "Upstream timeout",
-      });
-    }
-
-    if (err.message?.startsWith("Upstream ")) {
-      return res.status(502).json({
-        status: "FAILED",
-        error: err.message,
-      });
-    }
-
-    console.error("[getMusicDiscovery] Unexpected error:", err);
-    return res.status(500).json({
-      status: "FAILED",
-      error: err?.message || "Internal error",
+    return sendSanitizedError(res, err, {
+      handler: "getMusicDiscovery",
+      logContext: {
+        type,
+        articleUrl: matchedItem?.link,
+      },
     });
   }
 };
