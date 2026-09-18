@@ -25,3 +25,17 @@ The app is a thin Express API that scrapes e-commerce sites and returns JSON. It
 1. Add a new controller in `controllers/` with its `URL` and `SELECTORS` objects and one exported handler per endpoint.
 2. Register the route in `v1/routes/sitesRoutes.js` (or a new `*Routes.js` file mounted from `index.js` if the grouping warrants it).
 3. Reuse `scrape()` from `services/scraperService.js` — do not add `fetch`/parsing logic to controllers.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in the repo's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles mapped to GitHub labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: one `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
