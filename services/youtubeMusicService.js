@@ -1,4 +1,6 @@
 import { Innertube } from "youtubei.js";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 // --- Typed Errors -------------------------------------------------------------
 
@@ -20,6 +22,45 @@ export class YoutubeMusicRateLimitError extends Error {
   }
 }
 
+// --- Token Persistence --------------------------------------------------------
+
+const TOKEN_PATH = new URL("../data/youtube-oauth-tokens.json", import.meta.url)
+  .pathname;
+
+const loadOAuthTokens = () => {
+  // 1. Env var fallback (useful for Render post-deploy recovery)
+  const envTokens = process.env.YOUTUBE_OAUTH_TOKENS_JSON;
+  if (envTokens) {
+    try {
+      return JSON.parse(envTokens);
+    } catch {
+      console.warn(
+        "[youtubeMusicService] YOUTUBE_OAUTH_TOKENS_JSON is invalid JSON",
+      );
+    }
+  }
+
+  // 2. File on disk
+  try {
+    const raw = readFileSync(TOKEN_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const saveOAuthTokens = (credentials) => {
+  try {
+    mkdirSync(dirname(TOKEN_PATH), { recursive: true });
+    writeFileSync(TOKEN_PATH, JSON.stringify(credentials, null, 2));
+  } catch (err) {
+    console.error(
+      "[youtubeMusicService] Failed to save OAuth tokens:",
+      err.message,
+    );
+  }
+};
+
 // --- Lazy Singleton -----------------------------------------------------------
 
 /** @type {import("youtubei.js").Innertube | null} */
@@ -27,7 +68,12 @@ let client = null;
 let initPromise = null;
 
 /**
- * Lazy-initializes (or re-initializes) the Innertube client with cookie auth.
+ * Lazy-initializes (or re-initializes) the Innertube client.
+ * Auth priority:
+ *   1. OAuth2 (TV client) — auto-refreshing, persists tokens to disk.
+ *   2. Cookie auth (legacy) — copied from browser, no auto-refresh.
+ *   3. Anonymous — no auth, read-only operations only.
+ *
  * Uses a mutex (initPromise) so concurrent requests wait for the same init.
  *
  * @returns {Promise<import("youtubei.js").Innertube>}
@@ -37,22 +83,48 @@ const initializeClient = async () => {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const cookies = process.env.YOUTUBE_MUSIC_COOKIES;
-    if (!cookies) {
-      throw new YoutubeMusicAuthError(
-        "YouTube Music auth failed",
-        { reason: "Missing YOUTUBE_MUSIC_COOKIES environment variable" },
-      );
+    const clientId = process.env.YOUTUBE_CLIENT_ID;
+    const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+    const oauthTokens = loadOAuthTokens();
+
+    // --- 1. OAuth2 (preferred) ---
+    if (clientId && clientSecret && oauthTokens) {
+      try {
+        const yt = await Innertube.create({
+          client_type: "TV",
+        });
+
+        yt.session.on("update-credentials", ({ credentials }) => {
+          saveOAuthTokens(credentials);
+        });
+
+        await yt.session.signIn(oauthTokens);
+        client = yt;
+        console.info("[youtubeMusicService] Authenticated via OAuth2 (TV client)");
+        return client;
+      } catch (err) {
+        console.warn(
+          "[youtubeMusicService] OAuth2 failed, trying fallback:",
+          err.message,
+        );
+      }
     }
 
-    try {
+    // --- 2. Cookie auth (legacy fallback) ---
+    const cookies = process.env.YOUTUBE_MUSIC_COOKIES;
+    if (cookies) {
       client = await Innertube.create({ cookie: cookies });
+      console.info("[youtubeMusicService] Authenticated via cookie (legacy)");
       return client;
-    } catch (err) {
-      // Clear promise so next call can retry
-      initPromise = null;
-      throw classifyError(err);
     }
+
+    // --- 3. Anonymous (last resort) ---
+    console.warn(
+      "[youtubeMusicService] No auth configured — using anonymous mode. " +
+        "Playlist creation will fail. Run scripts/youtube-auth.js to set up OAuth2.",
+    );
+    client = await Innertube.create();
+    return client;
   })();
 
   try {
@@ -71,19 +143,20 @@ const initializeClient = async () => {
  * Detection strategy (in order):
  *  1. Already-typed errors pass through (prevents double-wrapping).
  *  2. Explicit status property (future-proof if youtubei.js adds it).
- *  3. HTTP status code embedded in message string — e.g.
- *     "Request to ... failed with status code 401" (HTTPClient.js:94).
- *  4. Auth sentinel messages — e.g.
- *     "You must be signed in to perform this operation." (Session.js, Studio.js).
- *  5. Keyword fallback for edge cases.
+ *  3. HTTP status code embedded in message string.
+ *  4. Auth sentinel messages.
+ *  5. OAuth2-specific messages (invalid_grant, token expired, etc.).
+ *  6. Keyword fallback for edge cases.
  *
  * @param {Error} err
  * @returns {Error}
  */
 const classifyError = (err) => {
-  // Already-typed errors pass through unchanged — prevents double-wrapping
-  // when an inner catch already classified and then withClient classifies again.
-  if (err instanceof YoutubeMusicAuthError || err instanceof YoutubeMusicRateLimitError) {
+  // Already-typed errors pass through unchanged
+  if (
+    err instanceof YoutubeMusicAuthError ||
+    err instanceof YoutubeMusicRateLimitError
+  ) {
     return err;
   }
 
@@ -97,12 +170,15 @@ const classifyError = (err) => {
     msg.includes("You must be signed in") ||
     msg.includes("auth") ||
     msg.includes("cookie") ||
-    msg.includes("invalid")
+    msg.includes("invalid") ||
+    msg.includes("invalid_grant") ||
+    msg.includes("token expired") ||
+    msg.includes("refresh") // refresh token failure
   ) {
-    return new YoutubeMusicAuthError(
-      "YouTube Music auth failed",
-      { reason: "YouTube Music rejected the authenticated request", originalMessage: msg },
-    );
+    return new YoutubeMusicAuthError("YouTube Music auth failed", {
+      reason: "YouTube Music rejected the authenticated request",
+      originalMessage: msg,
+    });
   }
 
   // --- Rate limits ---
@@ -111,10 +187,10 @@ const classifyError = (err) => {
     msg.includes("status code 429") ||
     msg.includes("rate")
   ) {
-    return new YoutubeMusicRateLimitError(
-      "YouTube Music rate limited",
-      { reason: "YouTube Music returned a rate limit response", originalMessage: msg },
-    );
+    return new YoutubeMusicRateLimitError("YouTube Music rate limited", {
+      reason: "YouTube Music returned a rate limit response",
+      originalMessage: msg,
+    });
   }
 
   return err;

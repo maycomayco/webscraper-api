@@ -1,0 +1,4 @@
+# Ignore all files in this directory (OAuth tokens, caches, etc.)
+*
+# Except this .gitignore
+!.gitignore
