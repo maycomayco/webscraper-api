@@ -109,7 +109,10 @@ return 502, upstream timeouts return 504, and YouTube rate limits return 429.
 Errors use `{ "status": "FAILED", "error": "..." }`.
 
 Previous `YOUTUBE_*` authentication variables and `data/youtube-oauth-tokens.json`
-are no longer read and can be removed from your local environment and Render.
+are no longer read and can be removed from your local environment and Render. If
+you previously authorized OAuth access for this app, revoke it from your Google
+account (https://myaccount.google.com/permissions) and delete any local copies of
+tokens or cookies.
 
 ## Tests
 

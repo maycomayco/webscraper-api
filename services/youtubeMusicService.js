@@ -47,31 +47,6 @@ export const _resetClient = () => {
   clientPromise = null;
 };
 
-/**
- * Searches YouTube Music for the top tracks of an artist.
- * @param {string} name - Artist name.
- * @returns {Promise<Array<{ title: string, videoId: string, artist: string, duration: string | number }>>}
- */
-export const searchArtist = (name) =>
-  withClient(async (yt) => {
-    const search = await yt.music.search(name);
-    const shelf = search.songs;
-
-    if (!shelf || !shelf.contents || shelf.contents.length === 0) {
-      return [];
-    }
-
-    return shelf.contents.slice(0, 20).map((item) => ({
-      title: item.flex_columns?.[0]?.title?.text ?? "",
-      videoId:
-        item.id ??
-        item.flex_columns?.[0]?.title?.runs?.[0]?.endpoint?.payload?.videoId ??
-        "",
-      artist: item.artists?.[0]?.name ?? "",
-      duration: item.duration?.seconds ?? 0,
-    }));
-  });
-
 /** Normalizes titles for fuzzy comparison. */
 const normalize = (str) =>
   str
