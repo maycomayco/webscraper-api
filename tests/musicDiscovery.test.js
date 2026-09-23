@@ -56,7 +56,7 @@ afterEach(async () => {
   _resetClient();
 });
 
-test("HTTP discovery returns anonymous listening links and legacy v1 fields", async (t) => {
+test("HTTP discovery returns anonymous listening links without account fields", async (t) => {
   const keys = ["YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_OAUTH_TOKENS_JSON", "YOUTUBE_MUSIC_COOKIES"];
   const previous = keys.map((key) => process.env[key]);
   t.after(() => keys.forEach((key, i) => {
@@ -68,16 +68,17 @@ test("HTTP discovery returns anonymous listening links and legacy v1 fields", as
   const response = await fetch(endpoint);
   assert.equal(response.status, 200);
   const report = await response.json();
-  assert.equal(report.playlist, null);
+  assert.equal(report.playlist, undefined);
+  assert.equal(report.tracksAdded, undefined);
+  assert.equal(report.summary?.added, undefined);
   assert.deepEqual(report.tracksFound, [{
     title: "Song One", artist: "Example Artist", videoId: "video-123",
     url: "https://music.youtube.com/watch?v=video-123",
   }]);
-  assert.deepEqual(report.tracksAdded, [{ title: "Song One", artist: "Example Artist" }]);
   assert.deepEqual(report.tracksNotFound, [{
     title: "Missing Song", artist: "Other Artist", reason: "No results found on YouTube Music",
   }]);
-  assert.deepEqual(report.summary, { total: 2, found: 1, added: 1, notFound: 1 });
+  assert.deepEqual(report.summary, { total: 2, found: 1, notFound: 1 });
   assert.match(report.source.url, /^https:\/\/indiehoy.com\//);
   assert.deepEqual(createClient.mock.calls[0].arguments, []);
   assert.equal(createClient.mock.callCount(), 1);
@@ -89,9 +90,9 @@ test("unmatched articles succeed with an empty report of found tracks", async ()
   assert.equal(response.status, 200);
   const report = await response.json();
   assert.deepEqual(report.tracksFound, []);
-  assert.deepEqual(report.tracksAdded, []);
-  assert.equal(report.playlist, null);
-  assert.deepEqual(report.summary, { total: 2, found: 0, added: 0, notFound: 2 });
+  assert.equal(report.tracksAdded, undefined);
+  assert.equal(report.playlist, undefined);
+  assert.deepEqual(report.summary, { total: 2, found: 0, notFound: 2 });
 });
 
 test("invalid article types are rejected before upstream calls", async () => {

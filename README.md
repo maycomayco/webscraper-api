@@ -86,7 +86,6 @@ the source article. Both use song search for the extracted article headings.
     "title": "Lanzamientos para escuchar esta semana",
     "date": "Tue, 22 Sep 2026 12:00:00 GMT"
   },
-  "playlist": null,
   "tracksFound": [
     {
       "title": "Example song",
@@ -95,27 +94,22 @@ the source article. Both use song search for the extracted article headings.
       "url": "https://music.youtube.com/watch?v=example-id"
     }
   ],
-  "tracksAdded": [{ "title": "Example song", "artist": "Example artist" }],
   "tracksNotFound": [],
-  "summary": { "total": 1, "found": 1, "added": 1, "notFound": 0 }
+  "summary": { "total": 1, "found": 1, "notFound": 0 }
 }
 ```
 
-Use `tracksFound` and `summary.found` for new consumers. The deprecated v1 fields
-`tracksAdded` (title/artist only) and `summary.added` mirror found tracks so the
-existing Telegram notifier keeps receiving recommendations. They do not report
-playlist additions. `playlist` is always `null`. Unmatched recommendations
-appear in `tracksNotFound` with a title, artist, and reason; an entirely unmatched
-article still returns HTTP 200 with an empty `tracksFound` array.
+Use `tracksFound` and `summary.found` for new consumers. Unmatched
+recommendations appear in `tracksNotFound` with a title, artist, and reason; an
+entirely unmatched article still returns HTTP 200 with an empty `tracksFound`
+array.
 
 Invalid types return 400, no matching article returns 404, upstream failures
 return 502, upstream timeouts return 504, and YouTube rate limits return 429.
 Errors use `{ "status": "FAILED", "error": "..." }`.
 
-Previous `YOUTUBE_*` authentication variables and
-`data/youtube-oauth-tokens.json` are no longer read and can be removed from
-your local environment and Render. The previous OAuth investigation is recorded
-in [ADR-0001](docs/adr/0001-oauth-token-persistence.md).
+Previous `YOUTUBE_*` authentication variables and `data/youtube-oauth-tokens.json`
+are no longer read and can be removed from your local environment and Render.
 
 ## Tests
 

@@ -261,15 +261,11 @@ export const getMusicDiscovery = async (req, res) => {
         title: matchedItem.title,
         date: matchedItem.pubDate || todayUTC(),
       },
-      playlist: null,
       tracksFound,
-      // Legacy v1 fields keep the weekly notifier compatible.
-      tracksAdded: tracksFound.map(({ title, artist }) => ({ title, artist })),
       tracksNotFound,
       summary: {
         total: parsedTracks.length,
         found: tracksFound.length,
-        added: tracksFound.length,
         notFound: tracksNotFound.length,
       },
     };
