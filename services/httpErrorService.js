@@ -3,10 +3,7 @@ import {
   UpstreamRequestError,
   UpstreamTimeoutError,
 } from "./scraperService.js";
-import {
-  YoutubeMusicAuthError,
-  YoutubeMusicRateLimitError,
-} from "./youtubeMusicService.js";
+import { YoutubeMusicRateLimitError } from "./youtubeMusicService.js";
 
 const buildFailureBody = (publicMessage) => ({
   status: "FAILED",
@@ -67,15 +64,6 @@ export const mapErrorToHttpResponse = (error, context = {}) => {
       ...base,
       status: 502,
       publicMessage: "Upstream request failed",
-      logLevel: "error",
-    };
-  }
-
-  if (error instanceof YoutubeMusicAuthError) {
-    return {
-      ...base,
-      status: 401,
-      publicMessage: "YouTube Music authentication failed",
       logLevel: "error",
     };
   }

@@ -2,7 +2,11 @@
 
 ## Estado
 
-Accepted
+Superseded (2026-09-22): se eligió descubrimiento anónimo sin creación de
+playlists en la issue #29. Ya no se cargan ni persisten tokens OAuth2.
+Las búsquedas autenticadas probadas con `youtubei.js` devolvían HTTP 400,
+mientras que las anónimas funcionaban. Se conserva este ADR como registro
+de la investigación, no como instrucciones de configuración vigentes.
 
 ## Contexto
 
