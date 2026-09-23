@@ -4,11 +4,7 @@ import {
   sendFailure,
   sendSanitizedError,
 } from "../services/httpErrorService.js";
-import {
-  searchSong,
-  createPlaylist,
-  addTracksToPlaylist,
-} from "../services/youtubeMusicService.js";
+import { searchSong } from "../services/youtubeMusicService.js";
 
 // --- IndieHoy Parser ----------------------------------------------------------
 // Site-specific knowledge (selectors, regex) lives here, not in services.
@@ -157,12 +153,6 @@ const todayUTC = () => {
   return d.toISOString().slice(0, 10);
 };
 
-/**
- * Builds the standard IndieHoy playlist title.
- * @returns {string}
- */
-const playlistTitle = () => `IndieHoy · descubrimientos · ${todayUTC()}`;
-
 // --- Pipeline Orchestration ---------------------------------------------------
 
 /**
@@ -172,7 +162,7 @@ const playlistTitle = () => `IndieHoy · descubrimientos · ${todayUTC()}`;
  *  1. Parse `?type` query param (default: "tracks", allowed: "tracks" | "albums").
  *  2. Resolve article URL from IndieHoy RSS feed (year fallback).
  *  3. Scrape the resolved article and parse with indieHoyParser.
- *  4. Return a typed JSON envelope with artist/items.
+ *  4. Find songs anonymously on YouTube Music and return listening links.
  *
  * @param {Object} req - Express request object.
  * @param {Object} res - Express response object.
@@ -186,7 +176,7 @@ export const getMusicDiscovery = async (req, res) => {
     // Step 1 — parse and validate type param
     type = req.query.type || "tracks";
 
-    if (!ARTICLE_TYPES[type]) {
+    if (typeof type !== "string" || !Object.hasOwn(ARTICLE_TYPES, type)) {
       return sendFailure(res, {
         status: 400,
         publicMessage: `Invalid type. Allowed: ${Object.keys(ARTICLE_TYPES).join(", ")}`,
@@ -242,17 +232,18 @@ export const getMusicDiscovery = async (req, res) => {
 
     // Step 4 — search each track on YouTube Music
     const parsedTracks = result.data; // Array<{ artist, song }>
-    const tracksAdded = [];
+    const tracksFound = [];
     const tracksNotFound = [];
 
     for (const track of parsedTracks) {
       const match = await searchSong(track.artist, track.song);
 
       if (match && match.videoId) {
-        tracksAdded.push({
+        tracksFound.push({
           title: match.title,
           artist: match.artist || track.artist,
           videoId: match.videoId,
+          url: `https://music.youtube.com/watch?v=${encodeURIComponent(match.videoId)}`,
         });
       } else {
         tracksNotFound.push({
@@ -263,50 +254,22 @@ export const getMusicDiscovery = async (req, res) => {
       }
     }
 
-    // Step 5 — create playlist (only if we found tracks)
-    let playlist = null;
-
-    if (tracksAdded.length > 0) {
-      const created = await createPlaylist(playlistTitle());
-      playlist = {
-        title: created.title,
-        id: created.playlistId,
-        url: created.url,
-      };
-
-      // Step 6 — add found tracks to the playlist
-      const videoIds = tracksAdded.map((t) => t.videoId);
-      const addResult = await addTracksToPlaylist(created.playlistId, videoIds);
-
-      // Reconcile: move skipped tracks from tracksAdded to tracksNotFound
-      if (addResult.skipped > 0) {
-        const actuallyAdded = tracksAdded.slice(0, addResult.trackCount);
-        const skippedTracks = tracksAdded.slice(addResult.trackCount);
-        skippedTracks.forEach((t) =>
-          tracksNotFound.push({
-            title: t.title,
-            artist: t.artist,
-            reason: "Skipped during playlist add (unavailable)",
-          }),
-        );
-        tracksAdded.length = 0;
-        tracksAdded.push(...actuallyAdded);
-      }
-    }
-
-    // Step 7 — build and return report
+    // Step 5 - return discoveries without account mutations.
     const report = {
       source: {
         url: matchedItem.link,
         title: matchedItem.title,
         date: matchedItem.pubDate || todayUTC(),
       },
-      playlist,
-      tracksAdded: tracksAdded.map(({ title, artist }) => ({ title, artist })),
+      playlist: null,
+      tracksFound,
+      // Legacy v1 fields keep the weekly notifier compatible.
+      tracksAdded: tracksFound.map(({ title, artist }) => ({ title, artist })),
       tracksNotFound,
       summary: {
         total: parsedTracks.length,
-        added: tracksAdded.length,
+        found: tracksFound.length,
+        added: tracksFound.length,
         notFound: tracksNotFound.length,
       },
     };
