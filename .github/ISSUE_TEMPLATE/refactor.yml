@@ -1,0 +1,25 @@
+name: Refactor
+description: Simplify existing code with a clear scope and verifiable outcome.
+title: "refactor: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the current friction and identify the affected files or modules.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-change
+    attributes:
+      label: Proposed change
+      description: Describe what should change and which existing behavior must be preserved.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: List the observable outcomes and checks that will prove the refactor is complete.
+    validations:
+      required: true
